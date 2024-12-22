@@ -255,21 +255,34 @@ if "selected_data" in st.session_state:
     with st.spinner("コメントを生成中です。しばらくお待ちください..."):
         adventure_comment = generate_gpt_comment(destinations)
         
-    # 場所1の情報を表示
-    st.write(f"#### {selected_data['場所1']}")
-    col1, col2 = st.columns([1, 3])  # カラムを分割してレイアウト調整
-    with col1:
-        st.image(selected_data['画像1'], caption=selected_data['場所1'], width=150)
-    with col2:
-        st.write(selected_data['解説1'])
-    
-    # 場所2の情報を表示
-    st.write(f"#### {selected_data['場所2']}")
-    col1, col2 = st.columns([1, 3])
-    with col1:
-        st.image(selected_data['画像2'], caption=selected_data['場所2'], width=150)
-    with col2:
-        st.write(selected_data['解説2'])
+# 場所1の情報を表示
+st.write(f"#### {selected_data.get('場所1', '不明な場所')}")
+col1, col2 = st.columns([1, 3])  # カラムを分割してレイアウト調整
+with col1:
+    try:
+        if '画像1' in selected_data and selected_data['画像1']:
+            st.image(selected_data['画像1'], caption=selected_data['場所1'], width=150)
+        else:
+            st.write("画像が見つかりません")
+    except Exception as e:
+        st.write(f"画像の表示中にエラーが発生しました: {e}")
+with col2:
+    st.write(selected_data.get('解説1', '解説がありません'))
+
+# 場所2の情報を表示
+st.write(f"#### {selected_data.get('場所2', '不明な場所')}")
+col1, col2 = st.columns([1, 3])
+with col1:
+    try:
+        if '画像2' in selected_data and selected_data['画像2']:
+            st.image(selected_data['画像2'], caption=selected_data['場所2'], width=150)
+        else:
+            st.write("画像が見つかりません")
+    except Exception as e:
+        st.write(f"画像の表示中にエラーが発生しました: {e}")
+with col2:
+    st.write(selected_data.get('解説2', '解説がありません'))
+
 
     # GPTコメントを表示
     st.write("### ネリーからの提案")
