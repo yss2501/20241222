@@ -98,7 +98,7 @@ with st.sidebar:
 # スライドショー
 if not search_button and not st.session_state.get("search_completed", False):
     image_placeholder = st.empty()
-    images = ["pic/0.png", "pic/1.png", "pic/2.png"]
+    images = ["./pic/0.png", "./pic/1.png", "./pic/2.png"]
     for img in images:
         if os.path.exists(img):
             image_placeholder.image(img, use_container_width=True)
