@@ -7,7 +7,7 @@ from streamlit_folium import st_folium
 import time
 import openai
 import os
-
+from PIL import Image
 # OpenAI APIキー
 openai.api_key = st.secrets["OPENAI_API_KEY"]
 API_KEY =  st.secrets["GoogleMap"]
