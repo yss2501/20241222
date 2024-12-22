@@ -2,45 +2,44 @@ import streamlit as st
 import requests
 import folium
 import pandas as pd
-from datetime import datetime  # 日付取得用
+from datetime import datetime
 from streamlit_folium import st_folium
 import time
-import openai  # GPTコメント生成用ライブラリ
+import openai
+import os
 
 # OpenAI APIキー
 openai.api_key = st.secrets["OPENAI_API_KEY"]
 API_KEY =  st.secrets["GoogleMap"]
 
-# APIのURLと都市コード（東京固定）
+# 天気APIのURLと都市コード
 city_code = "130010"  # 東京の都市コード
-url = f"https://weather.tsukumijima.net/api/forecast/city/{city_code}"  # リクエストURL
+url = f"https://weather.tsukumijima.net/api/forecast/city/{city_code}"
 
-# 天気情報を取得する関数
+# 天気情報取得関数
 def get_weather(url):
-    response = requests.get(url)
-    if response.status_code == 200:
+    try:
+        response = requests.get(url)
+        response.raise_for_status()
         return response.json()
-    else:
-        st.sidebar.error("天気情報を取得できませんでした。")
+    except requests.exceptions.RequestException as e:
+        st.sidebar.error(f"天気情報取得エラー: {e}")
         return None
 
-# コメント生成関数
+# GPTコメント生成関数
 def generate_gpt_comment(destinations):
     try:
-        # プロンプトの作成
         messages = [
             {"role": "system", "content": "あなたは練馬の地元旅行ガイドのネリーです。"},
             {"role": "user", "content": (
-                f"以下の情報を元に、場所1と場所2を組み合わせた冒険や旅行の提案を、100字以内でユニークでわくわくするコメントを作成してください。\n\n" +
-                f"場所1: {destinations[0]['場所']}\n解説: {destinations[0]['解説']}\n\n" +
-                f"場所2: {destinations[1]['場所']}\n解説: {destinations[1]['解説']}\n\n" +
+                f"以下の情報を元に、場所1と場所2を組み合わせた冒険や旅行の提案を、100字以内でユニークでわくわくするコメントを作成してください。\n\n"
+                f"場所1: {destinations[0]['場所']}\n解説: {destinations[0]['解説']}\n\n"
+                f"場所2: {destinations[1]['場所']}\n解説: {destinations[1]['解説']}\n\n"
                 "まとめコメント:"
             )}
         ]
-
-        # OpenAIのAPI呼び出し
         response = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",  # または "gpt-4"
+            model="gpt-3.5-turbo",
             messages=messages,
             max_tokens=150,
             temperature=0.7
@@ -49,6 +48,7 @@ def generate_gpt_comment(destinations):
     except Exception as e:
         return f"コメント生成中にエラーが発生しました: {e}"
 
+# CSVデータ
 # CSVデータを直接埋め込み
 data = pd.DataFrame([
   {"今の気持ち": "わくわく巨大公園", "場所1": "光が丘公園", "画像1": "pic/002.jpg", "解説1": "光が丘団地に隣接する練馬区最大の公園。キャッチボール、サッカーなどボール遊びができる。近くにショッピングモールやレストランあり。", "住所1": "東京都練馬区光が丘４丁目１-１", "場所2": "久松湯", "画像2": "pic/003.jpg", "解説2": "2014年５月に新装開店。美術館のような斬新な建築の銭湯。大きな天然温泉の露天風呂、人工炭酸泉、電気マッサージ風呂、冷水風呂、冷水シャワー、サウナなどを設置。浴室でプロジェクションマッピングによる光の演出が楽しめる。", "住所2": "東京都練馬区桜台４丁目３２-１５"},
@@ -59,236 +59,199 @@ data = pd.DataFrame([
   {"今の気持ち": "ファミリーわくわく", "場所1": "練馬展望レストラン", "画像1": "pic/nerimatenbo-restaurant.jpg", "解説1": "練馬区役所20Fにある展望レストラン。練馬区在住の方以外には多分あまり知られていない穴場的なレストランではないでしょうか。展望台には以前訪れたことがあり、レストランが気になっていました。落ち着いていながら気取らない雰囲気で店員さんも感じ良く、窓側の席から夜景も綺麗に見えて楽しく過ごせました。", "住所1": "東京都練馬区豊玉北６-１２-１練馬区役所内２０Ｆ", "場所2": "トキワ荘マンガミュージアム", "画像2": "pic/tokiwaso-museum.jpg", "解説2": "かつて豊島区椎名町（現南長崎）にあったトキワ荘は、手塚治虫をはじめとするマンガの巨匠たちが住み集い、若き青春の日々を過ごした伝説のアパート。１９８２年１２月に解体されたが、多くの皆様のお力添えにより、マンガミュージアムとして開館した。当時の世界にタイムスリップできる。", "住所2": "東京都豊島区南長崎3-9-22南長崎花咲公園内"},
   {"今の気持ち": "どきどきアクティブ", "場所1": "春日町バッティングセンター", "画像1": "pic/kasugacho-batingcenter.jpg", "解説1": "バッティング練習に！運動不足・ストレスの解消に！200円から楽しめるレジャー。", "住所1": "東京都練馬区春日町2丁目14-11", "場所2": "志村電機珈琲焙煎所", "画像2": "pic/shimuradenki-coffee-baisenjo.jpg", "解説2": "電機店と珈琲焙煎所のコラボ。豊島園駅から歩いて行ける宝箱のような街喫茶。", "住所2": "東京都練馬区春日町1-11-1"}
 ])
-# 固定された出発地
+
+# 固定出発地
 fixed_origin = "豊島園駅"
 st.session_state.setdefault("fixed_origin", fixed_origin)
 
-# Streamlitアプリ
+# アプリタイトル
 st.title("練馬ワンダーランド")
 
-# サイドバーにウィジェットを配置
+# サイドバー設定
 with st.sidebar:
     st.header("設定")
 
-    # 気分の選択肢を表示
-    if "今の気持ち" in data.columns:
-        selected_mood = st.selectbox("今の気分を選んでください", data["今の気持ち"].unique())
-    else:
-        st.error("データに「今の気持ち」カラムが見つかりません。")
+    # 気分選択
+    selected_mood = st.selectbox("今の気分を選んでください", data["今の気持ち"].unique())
 
-    # 移動手段の選択肢を表示
+    # 移動手段選択
     transport_mode = st.radio("移動手段を選んでください", ["徒歩", "自転車", "タクシー"])
     mode_map = {"徒歩": "walking", "自転車": "bicycling", "タクシー": "driving"}
     selected_mode = mode_map[transport_mode]
 
-    # 食事の希望をチェック
+    # 食事希望チェック
     food_preference = st.checkbox("食事の希望がありますか？")
-    if food_preference:
-        st.write("食事希望: あり")
-    else:
-        st.write("食事希望: なし")
+    st.write(f"食事希望: {'あり' if food_preference else 'なし'}")
 
-    # 確定ボタン
+    # 検索ボタン
     search_button = st.button("ルートを検索")
 
-    # サイドバーの下部に天気情報を表示
-    st.markdown("---")  # 水平線で区切りを追加
+    # 天気情報表示
+    st.markdown("---")
     st.subheader("練馬の天気（3日分）")
-
-    # 天気情報の取得と表示
     weather_json = get_weather(url)
     if weather_json:
-        # 天気情報を3日分表示
-        for i in range(3):  # 今日、明日、明後日
-            forecast_date = weather_json['forecasts'][i]['dateLabel']
-            weather = weather_json['forecasts'][i]['telop']
-            icon_url = weather_json['forecasts'][i]['image']['url']
-            st.image(icon_url, width=85)
-            st.write(f"{forecast_date}: {weather}")
-    else:
-        st.write("天気情報を取得できませんでした。")
+        for forecast in weather_json['forecasts']:
+            st.image(forecast['image']['url'], width=85)
+            st.write(f"{forecast['dateLabel']}: {forecast['telop']}")
 
-# 以下はスライドショーやルート検索の処理
-if "search_completed" not in st.session_state:
-    st.session_state["search_completed"] = False
-
-if not search_button and not st.session_state["search_completed"]:
+# スライドショー
+if not search_button and not st.session_state.get("search_completed", False):
     image_placeholder = st.empty()
     images = ["pic/0.png", "pic/1.png", "pic/2.png"]
     for img in images:
-        image_placeholder.image(img, use_container_width=True)
+        if os.path.exists(img):
+            image_placeholder.image(img, use_container_width=True)
+        else:
+            st.warning(f"画像が見つかりません: {img}")
         time.sleep(1)
-        if st.session_state["search_completed"]:
+        if st.session_state.get("search_completed"):
             break
 else:
     st.session_state["search_completed"] = True
 
+# ルート検索
 if search_button:
     st.session_state["search_completed"] = True
+    selected_data = data[data["今の気持ち"] == selected_mood].iloc[0]
+    st.session_state["selected_data"] = selected_data.to_dict()
 
-    if selected_mood:
-        selected_data = data[data["今の気持ち"] == selected_mood].iloc[0]
+# ルート検索
+if search_button:
+    st.session_state["search_completed"] = True
+    selected_data = data[data["今の気持ち"] == selected_mood].iloc[0]
+    st.session_state["selected_data"] = selected_data.to_dict()
 
-        # 保存用データをセッションに記録
-        st.session_state["selected_data"] = {
-            "場所1": selected_data["場所1"],
-            "画像1": selected_data["画像1"],
-            "解説1": selected_data["解説1"],
-            "場所2": selected_data["場所2"],
-            "画像2": selected_data["画像2"],
-            "解説2": selected_data["解説2"]
-        }
+    origin = fixed_origin
+    destination1 = selected_data["住所1"]
+    destination2 = selected_data["住所2"]
 
-        origin = fixed_origin
-        destination1 = selected_data["住所1"]
-        destination2 = selected_data["住所2"]
+    directions_url1 = (
+        f"https://maps.googleapis.com/maps/api/directions/json"
+        f"?origin={origin}&destination={destination1}&mode={selected_mode}&key={API_KEY}"
+    )
+    directions_url2 = (
+        f"https://maps.googleapis.com/maps/api/directions/json"
+        f"?origin={destination1}&destination={destination2}&mode={selected_mode}&key={API_KEY}"
+    )
+    directions_url3 = (
+        f"https://maps.googleapis.com/maps/api/directions/json"
+        f"?origin={destination2}&destination={origin}&mode={selected_mode}&key={API_KEY}"
+    )
 
-        directions_url1 = (
-            f"https://maps.googleapis.com/maps/api/directions/json"
-            f"?origin={origin}&destination={destination1}&mode={selected_mode}&key={API_KEY}"
-        )
-        directions_url2 = (
-            f"https://maps.googleapis.com/maps/api/directions/json"
-            f"?origin={destination1}&destination={destination2}&mode={selected_mode}&key={API_KEY}"
-        )
-        directions_url3 = (
-            f"https://maps.googleapis.com/maps/api/directions/json"
-            f"?origin={destination2}&destination={origin}&mode={selected_mode}&key={API_KEY}"
-        )
+    res1 = requests.get(directions_url1)
+    res2 = requests.get(directions_url2)
+    res3 = requests.get(directions_url3)
 
-        res1 = requests.get(directions_url1)
-        res2 = requests.get(directions_url2)
-        res3 = requests.get(directions_url3)
+    if res1.status_code == 200 and res2.status_code == 200 and res3.status_code == 200:
+        data1 = res1.json()
+        data2 = res2.json()
+        data3 = res3.json()
 
-        if res1.status_code == 200 and res2.status_code == 200 and res3.status_code == 200:
-            data1 = res1.json()
-            data2 = res2.json()
-            data3 = res3.json()
+        if all("routes" in d and len(d["routes"]) > 0 for d in [data1, data2, data3]):
+            route1 = data1["routes"][0]["overview_polyline"]["points"]
+            route2 = data2["routes"][0]["overview_polyline"]["points"]
+            route3 = data3["routes"][0]["overview_polyline"]["points"]
 
-            if "routes" in data1 and len(data1["routes"]) > 0 and "routes" in data2 and len(data2["routes"]) > 0 and "routes" in data3 and len(data3["routes"]) > 0:
-                route1 = data1["routes"][0]["overview_polyline"]["points"]
-                route2 = data2["routes"][0]["overview_polyline"]["points"]
-                route3 = data3["routes"][0]["overview_polyline"]["points"]
+            # Decode polyline
+            def decode_polyline(polyline_str):
+                index, lat, lng, coordinates = 0, 0, 0, []
+                while index < len(polyline_str):
+                    b, shift, result = 0, 0, 0
+                    while True:
+                        b = ord(polyline_str[index]) - 63
+                        index += 1
+                        result |= (b & 0x1F) << shift
+                        shift += 5
+                        if b < 0x20:
+                            break
+                    dlat = ~(result >> 1) if result & 1 else (result >> 1)
+                    lat += dlat
+                    shift, result = 0, 0
+                    while True:
+                        b = ord(polyline_str[index]) - 63
+                        index += 1
+                        result |= (b & 0x1F) << shift
+                        shift += 5
+                        if b < 0x20:
+                            break
+                    dlng = ~(result >> 1) if result & 1 else (result >> 1)
+                    lng += dlng
+                    coordinates.append((lat / 1e5, lng / 1e5))
+                return coordinates
 
-                # Decode polyline
-                def decode_polyline(polyline_str):
-                    index, lat, lng, coordinates = 0, 0, 0, []
-                    while index < len(polyline_str):
-                        b, shift, result = 0, 0, 0
-                        while True:
-                            b = ord(polyline_str[index]) - 63
-                            index += 1
-                            result |= (b & 0x1F) << shift
-                            shift += 5
-                            if b < 0x20:
-                                break
-                        dlat = ~(result >> 1) if result & 1 else (result >> 1)
-                        lat += dlat
-                        shift, result = 0, 0
-                        while True:
-                            b = ord(polyline_str[index]) - 63
-                            index += 1
-                            result |= (b & 0x1F) << shift
-                            shift += 5
-                            if b < 0x20:
-                                break
-                        dlng = ~(result >> 1) if result & 1 else (result >> 1)
-                        lng += dlng
-                        coordinates.append((lat / 1e5, lng / 1e5))
-                    return coordinates
+            route_coords1 = decode_polyline(route1)
+            route_coords2 = decode_polyline(route2)
+            route_coords3 = decode_polyline(route3)
 
-                route_coords1 = decode_polyline(route1)
-                route_coords2 = decode_polyline(route2)
-                route_coords3 = decode_polyline(route3)
+            # セッションステートにルート情報を保存
+            st.session_state["route_coords1"] = route_coords1
+            st.session_state["route_coords2"] = route_coords2
+            st.session_state["route_coords3"] = route_coords3
 
-                # セッションにルートデータ保存
-                st.session_state["route_coords1"] = route_coords1
-                st.session_state["route_coords2"] = route_coords2
-                st.session_state["route_coords3"] = route_coords3
+            # 各ルートの所要時間を取得
+            duration1 = data1["routes"][0]["legs"][0]["duration"]["text"]
+            duration2 = data2["routes"][0]["legs"][0]["duration"]["text"]
+            duration3 = data3["routes"][0]["legs"][0]["duration"]["text"]
 
-                # 移動時間を取得
-                duration1 = data1["routes"][0]["legs"][0]["duration"]["text"]
-                duration2 = data2["routes"][0]["legs"][0]["duration"]["text"]
-                duration3 = data3["routes"][0]["legs"][0]["duration"]["text"]
+            st.session_state["route_table"] = pd.DataFrame({
+                "出発地": [fixed_origin, selected_data["場所1"], selected_data["場所2"]],
+                "目的地": [selected_data["場所1"], selected_data["場所2"], fixed_origin],
+                "所要時間": [duration1, duration2, duration3]
+            })
 
-                st.session_state["route_table"] = pd.DataFrame({
-                    "出発地": [fixed_origin, selected_data["場所1"], selected_data["場所2"]],
-                    "目的地": [selected_data["場所1"], selected_data["場所2"], fixed_origin],
-                    "所要時間": [duration1, duration2, duration3]
-                })
+            # 地図データ作成
+            m = folium.Map(location=route_coords1[0], zoom_start=13)
+            folium.PolyLine(route_coords1, color="blue", weight=5, opacity=0.7).add_to(m)
+            folium.PolyLine(route_coords2, color="purple", weight=5, opacity=0.7).add_to(m)
+            folium.PolyLine(route_coords3, color="red", weight=5, opacity=0.7).add_to(m)
+
+            # マーカー追加
+            folium.Marker(
+                location=route_coords1[0], popup="出発地: " + origin, icon=folium.Icon(color="green")
+            ).add_to(m)
+            folium.Marker(
+                location=route_coords1[-1], popup="目的地1: " + selected_data["場所1"], icon=folium.Icon(color="orange")
+            ).add_to(m)
+            folium.Marker(
+                location=route_coords2[-1], popup="目的地2: " + selected_data["場所2"], icon=folium.Icon(color="red")
+            ).add_to(m)
+            folium.Marker(
+                location=route_coords3[-1], popup="戻り: " + origin, icon=folium.Icon(color="blue")
+            ).add_to(m)
+
+            st.session_state["map"] = m
+
+    else:
+        st.error("ルート情報の取得に失敗しました。APIキーやリクエスト内容を確認してください。")
 
 
-                # 地図データを保存
-                m = folium.Map(location=route_coords1[0], zoom_start=13)
-                folium.PolyLine(route_coords1, color="blue", weight=5, opacity=0.7).add_to(m)
-                folium.PolyLine(route_coords2, color="purple", weight=5, opacity=0.7).add_to(m)
-                folium.PolyLine(route_coords3, color="red", weight=5, opacity=0.7).add_to(m)
-
-                # Add markers
-                folium.Marker(
-                    location=route_coords1[0], popup="出発地: " + origin, icon=folium.Icon(color="green")
-                ).add_to(m)
-                folium.Marker(
-                    location=route_coords1[-1], popup="目的地1: " + selected_data["場所1"], icon=folium.Icon(color="orange")
-                ).add_to(m)
-                folium.Marker(
-                    location=route_coords2[-1], popup="目的地2: " + selected_data["場所2"], icon=folium.Icon(color="red")
-                ).add_to(m)
-                folium.Marker(
-                    location=route_coords3[-1], popup="戻り: " + origin, icon=folium.Icon(color="blue")
-                ).add_to(m)
-
-                st.session_state["map"] = m
-                
-# メイン画面に状態を再表示
+# 選択した場所とルートの表示
 if "selected_data" in st.session_state:
     selected_data = st.session_state["selected_data"]
 
-    st.write("### あなたの気分にあった冒険プランは、こちらです！")
-    # 目的地情報リスト
-    destinations = [
-        {"場所": selected_data["場所1"], "解説": selected_data["解説1"]},
-        {"場所": selected_data["場所2"], "解説": selected_data["解説2"]},
-    ]
-    
-    # GPTコメント生成中にスピナーを表示
-    with st.spinner("コメントを生成中です。しばらくお待ちください..."):
-        adventure_comment = generate_gpt_comment(destinations)
-        
-# 場所1の情報を表示
-st.write(f"#### {selected_data.get('場所1', '不明な場所')}")
-col1, col2 = st.columns([1, 3])  # カラムを分割してレイアウト調整
-with col1:
-    try:
-        if '画像1' in selected_data and selected_data['画像1']:
-            st.image(selected_data['画像1'], caption=selected_data['場所1'], width=150)
-        else:
-            st.write("画像が見つかりません")
-    except Exception as e:
-        st.write(f"画像の表示中にエラーが発生しました: {e}")
-with col2:
-    st.write(selected_data.get('解説1', '解説がありません'))
+    # 場所1と場所2の表示
+    for i in range(1, 3):
+        st.write(f"#### {selected_data[f'場所{i}']}")
+        col1, col2 = st.columns([1, 3])
+        with col1:
+            if os.path.exists(selected_data[f'画像{i}']):
+                st.image(selected_data[f'画像{i}'], caption=selected_data[f'場所{i}'], width=150)
+            else:
+                st.warning(f"画像が見つかりません: {selected_data[f'画像{i}']}")
+        with col2:
+            st.write(selected_data[f'解説{i}'])
 
-# 場所2の情報を表示
-st.write(f"#### {selected_data.get('場所2', '不明な場所')}")
-col1, col2 = st.columns([1, 3])
-with col1:
-    try:
-        if '画像2' in selected_data and selected_data['画像2']:
-            st.image(selected_data['画像2'], caption=selected_data['場所2'], width=150)
-        else:
-            st.write("画像が見つかりません")
-    except Exception as e:
-        st.write(f"画像の表示中にエラーが発生しました: {e}")
-with col2:
-    st.write(selected_data.get('解説2', '解説がありません'))
-
-
-    # GPTコメントを表示
+    # GPTコメント表示
+    with st.spinner("コメントを生成中です..."):
+        adventure_comment = generate_gpt_comment([
+            {"場所": selected_data["場所1"], "解説": selected_data["解説1"]},
+            {"場所": selected_data["場所2"], "解説": selected_data["解説2"]}
+        ])
     st.write("### ネリーからの提案")
     st.write(adventure_comment)
 
-# 保存された表を表示
+# 地図とルート情報の表示
 if "route_table" in st.session_state:
     st.write("### ルート情報")
     st.table(st.session_state["route_table"])
